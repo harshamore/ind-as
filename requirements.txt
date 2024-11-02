@@ -1,7 +1,8 @@
 streamlit
 pandas
 openai
-crewAI  # assuming a hypothetical package for crewai functionality
+crewai
 requests
 beautifulsoup4
 python-docx
+chromadb
