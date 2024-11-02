@@ -7,18 +7,17 @@ from bs4 import BeautifulSoup
 from PyPDF2 import PdfReader
 import os
 
-# Initialize Streamlit app
+# Set OpenAI API key from Streamlit secrets
+openai.api_key = st.secrets["OPENAI_API_KEY"]
+
+# Streamlit app title
 st.title("Intelligent Ind AS Financial Consolidation Tool with Guide Agent")
-st.write("Upload the financial statements of multiple subsidiaries, and select the applicable standard.")
 
 # Dropdown for standard selection
 selected_standard = st.selectbox("Select Accounting Standard", ["Ind AS 110", "Ind AS 21"])
 
 # Upload multiple Excel files
 uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_multiple_files=True, type="xlsx")
-
-# Use OpenAI API key from Streamlit secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]  # Access the API key securely
 
 # Define GuideAgent to process Ind AS 110 document and create a list of steps
 class GuideAgent(Agent):
@@ -55,17 +54,25 @@ class GuideAgent(Agent):
         self.fetch_document(url)
         document_text = self.extract_text_from_pdf("/tmp/ind_as_110.pdf")
 
-        # Summarize document into steps using OpenAI
+        # Summarize document into steps using OpenAI with chat model
         prompt = (
             "Extract and summarize the key steps for preparing consolidated financial statements as per Ind AS 110 "
             "from the following text:\n\n" + document_text
         )
-        response = openai.Completion.create(
-            model="gpt-3.5-turbo",  # Adjust to gpt-3.5-turbo if gpt-4 is not available
-            prompt=prompt,
-            max_tokens=500
-        )
-        return response.choices[0].text.strip().splitlines()
+        
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500
+            )
+            return response.choices[0].message["content"].strip().splitlines()
+        except openai.error.InvalidRequestError as e:
+            st.error(f"Invalid request error: {e}")
+            return ["Error processing document. Please check your OpenAI API configuration."]
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
+            return ["Error processing document. Please try again later."]
 
     def get_steps(self):
         return self.steps
@@ -74,7 +81,6 @@ class GuideAgent(Agent):
 guide_agent = GuideAgent(name="Guide", role="Guide Specialist", goal="Provide steps for Ind AS 110", backstory="Expert in understanding Ind AS 110.")
 
 # Define other agents with enhanced functionalities, consulting GuideAgent steps as needed
-
 class DataEntryAgent(Agent):
     def perform(self, data, guide_agent):
         steps = guide_agent.get_steps()  # Consult GuideAgent for instructions
@@ -102,12 +108,12 @@ class DataEntryAgent(Agent):
 
     def get_required_items_from_gpt4(self, standard):
         prompt = f"Analyze the latest {standard} standard and list all required items and their structure for financial statements."
-        response = openai.Completion.create(
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            prompt=prompt,
+            messages=[{"role": "user", "content": prompt}],
             max_tokens=150
         )
-        return response.choices[0].text.strip().split(',')
+        return response.choices[0].message["content"].strip().split(',')
 
     def check_missing_entries(self, data, required_items):
         missing_entries = [item for item in required_items if not data['Account'].str.contains(item).any()]
@@ -115,20 +121,17 @@ class DataEntryAgent(Agent):
 
     def get_handling_guidance_from_gpt4(self, missing_entries, standard):
         prompt = f"Based on {standard}, how should we proceed if the following items are missing in financial statements: {', '.join(missing_entries)}?"
-        response = openai.Completion.create(
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            prompt=prompt,
+            messages=[{"role": "user", "content": prompt}],
             max_tokens=150
         )
-        return response.choices[0].text.strip()
-
-# Define other agents here (ReconciliationAgent, ComplianceAgent, ConsolidationAgent), each consulting GuideAgent as needed
+        return response.choices[0].message["content"].strip()
 
 # Initialize Crew with the defined agents, including GuideAgent
 crew = Crew(agents=[
     guide_agent,
     DataEntryAgent(name="Data Entry", role="Data Entry Specialist", goal="Ensure data completeness based on Ind AS standards", backstory="Expert in data validation for financial records."),
-    # Initialize other agents with their required fields
 ])
 
 # Define the process function
@@ -145,7 +148,7 @@ def process_files(files):
 
     return data_entries  # Assuming final data
 
-# Process button
+# Process button for actual data processing
 if st.button("Process"):
     if uploaded_files:
         with st.spinner("Processing..."):
@@ -157,3 +160,16 @@ if st.button("Process"):
             st.download_button("Download Consolidated Statement as CSV", data=csv, file_name="consolidated_statement.csv")
     else:
         st.warning("Please upload at least one file.")
+
+# Test OpenAI Connection button
+if st.button("Test OpenAI Connection"):
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": "Hello, OpenAI!"}],
+            max_tokens=10
+        )
+        st.write("Response from OpenAI API:")
+        st.write(response.choices[0].message["content"].strip())
+    except Exception as e:
+        st.error(f"Error: {e}")
