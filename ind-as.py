@@ -8,7 +8,7 @@ import os
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # Streamlit app title
-st.title("Udal Basya consolidation effort")
+st.title("AS 21 Compliance & Consolidation Tool with OpenAI Consultation")
 
 # Upload multiple Excel files
 uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_multiple_files=True, type="xlsx")
@@ -77,8 +77,8 @@ if st.button("Process & Consolidate") or consolidation_complete:
         # Set consolidation flag to True after processing is complete
         consolidation_complete = True
         
-        # Button for detailed guidance after consolidation and download
-        if st.button("What did I do?"):
+        # Automatically display AS 21 guidance after download
+        if download:
             # Display AS 21 initial consolidation steps
             st.subheader("AS 21 Initial Consolidation Steps")
             initial_guidance = consult_openai("What are the initial consolidation steps to follow according to AS 21?")
