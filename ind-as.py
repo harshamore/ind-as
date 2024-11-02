@@ -81,7 +81,8 @@ class DataEntryAgent:
             df = pd.read_excel(file)
             missing_info = []
             for info in required_info:
-                if not df.apply(lambda row: row.astype(str).str.contains(info).any(), axis=1).any():
+                # Use regex=False to avoid issues with special characters in `info`
+                if not df.apply(lambda row: row.astype(str).str.contains(info, regex=False).any(), axis=1).any():
                     missing_info.append(info)
             results[file.name] = missing_info
         return results
