@@ -13,11 +13,9 @@ embedding_path = "/tmp/as21_embeddings.pkl"
 # Step 1: AS21 Compliance Agent
 class AS21ComplianceAgent:
     def __init__(self):
-        # Initialize the embeddings and vectorizer by loading or creating them
         self.chunks, self.embeddings, self.vectorizer = self.load_or_create_embeddings()
 
     def fetch_and_process_pdf(self, url):
-        # Fetch and read the PDF document
         response = requests.get(url)
         with open("/tmp/as21.pdf", "wb") as f:
             f.write(response.content)
@@ -29,24 +27,20 @@ class AS21ComplianceAgent:
         return document_text
 
     def chunk_text(self, text, chunk_size=300):
-        # Split text into chunks of specified token size
         words = text.split()
         return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
 
     def create_embeddings(self):
-        # Create chunks and embeddings from the AS 21 document
         document_text = self.fetch_and_process_pdf(as21_pdf_url)
         chunks = self.chunk_text(document_text)
         vectorizer = TfidfVectorizer()
         embeddings = vectorizer.fit_transform(chunks)
         
-        # Save chunks, embeddings, and vectorizer to a file
         with open(embedding_path, "wb") as f:
             pickle.dump((chunks, embeddings, vectorizer), f)
         return chunks, embeddings, vectorizer
 
     def load_or_create_embeddings(self):
-        # Load existing embeddings or create new ones if file is missing or corrupted
         if os.path.exists(embedding_path):
             try:
                 with open(embedding_path, "rb") as f:
@@ -59,7 +53,6 @@ class AS21ComplianceAgent:
             return self.create_embeddings()
 
     def retrieve_relevant_info(self, query):
-        # Transform query and retrieve the best-matching chunk
         query_embedding = self.vectorizer.transform([query])
         scores = query_embedding * self.embeddings.T
         best_chunk_idx = scores.toarray().argmax()
@@ -71,17 +64,14 @@ class DataEntryAgent:
         self.compliance_agent = compliance_agent
 
     def process_excel_files(self, files):
-        # Query AS 21 Compliance Agent for required information
         compliance_query = "What information needs to be checked for compliance with AS 21?"
         required_info = self.compliance_agent.retrieve_relevant_info(compliance_query)
 
-        # Process each uploaded Excel file to check for missing information
         results = {}
         for file in files:
             df = pd.read_excel(file)
             missing_info = []
             for info in required_info:
-                # Use regex=False to avoid issues with special characters in `info`
                 if not df.apply(lambda row: row.astype(str).str.contains(info, regex=False).any(), axis=1).any():
                     missing_info.append(info)
             results[file.name] = missing_info
@@ -94,13 +84,21 @@ class ConsolidationAgent:
         self.data_entry_agent = data_entry_agent
 
     def consolidate(self, files):
-        # Use Data Entry Agent to process files and gather results
         results = self.data_entry_agent.process_excel_files(files)
         consolidated_output = {
             "Compliance Check": results,
             "Summary": "Consolidated statement based on AS 21 compliance checks and data entries."
         }
-        return consolidated_output
+
+        # Write results to an Excel file
+        with pd.ExcelWriter("/tmp/consolidation_excel.xlsx") as writer:
+            for file_name, missing_info in results.items():
+                df = pd.DataFrame({"Missing Information": missing_info})
+                df.to_excel(writer, sheet_name=file_name[:31], index=False)  # Limit sheet name to 31 chars
+            summary_df = pd.DataFrame([{"Summary": consolidated_output["Summary"]}])
+            summary_df.to_excel(writer, sheet_name="Summary", index=False)
+
+        return "/tmp/consolidation_excel.xlsx"
 
 # Instantiate agents
 as21_compliance_agent = AS21ComplianceAgent()
@@ -117,8 +115,16 @@ uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_
 if st.button("Process & Consolidate"):
     if uploaded_files:
         with st.spinner("Processing and consolidating..."):
-            output = consolidation_agent.consolidate(uploaded_files)
-            st.write("Consolidation Result:")
-            st.json(output)
+            excel_path = consolidation_agent.consolidate(uploaded_files)
+            st.success("Consolidation Complete!")
+            
+            # Download button for the consolidated Excel file
+            with open(excel_path, "rb") as f:
+                st.download_button(
+                    label="Download Consolidated Excel",
+                    data=f,
+                    file_name="consolidated_accounts.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
     else:
         st.warning("Please upload at least one file.")
