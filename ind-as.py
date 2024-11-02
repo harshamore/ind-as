@@ -13,7 +13,7 @@ st.write("Upload the financial statements of multiple subsidiaries, and click 'P
 uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_multiple_files=True, type="xlsx")
 
 # Initialize OpenAI API
-openai.api_key = "your_openai_api_key"  # Set your OpenAI API key
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 crew = Crew()  # Initialize a Crew instance
 
 # Function to fetch the latest Ind AS 110 document
