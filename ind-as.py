@@ -16,7 +16,7 @@ uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_
 # Function to consult OpenAI for AS 21 guidance
 def consult_openai(query):
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": query}],
         max_tokens=300
     )
@@ -39,11 +39,6 @@ if st.button("Process & Consolidate"):
                 row_data = [file_name, sheet_name] + row.tolist()
                 summary_data.append(row_data)
         
-        # Step 1: Consult OpenAI for initial AS 21 guidance
-        st.subheader("AS 21 Guidance from OpenAI")
-        initial_guidance = consult_openai("What steps should I follow to consolidate financial statements as per AS 21?")
-        st.write(initial_guidance)
-
         # Process each uploaded file
         for uploaded_file in uploaded_files:
             file_name = uploaded_file.name
@@ -53,11 +48,7 @@ if st.button("Process & Consolidate"):
             for sheet_name in xls.sheet_names:
                 sheet_data = xls.parse(sheet_name)
                 add_sheet_to_summary(sheet_data, file_name, sheet_name)
-                
-                # Ask OpenAI for guidance specific to the current sheet
-                sheet_guidance = consult_openai(f"What AS 21 rules should I consider for consolidating the '{sheet_name}' sheet in '{file_name}'?")
-                st.write(f"Guidance for {file_name} - {sheet_name}: {sheet_guidance}")
-
+        
         # Write consolidated data to the workbook
         header = ["File", "Sheet"] + [f"Column {i}" for i in range(1, len(summary_data[0]) - 1)]
         consolidated_ws.append(header)
@@ -79,5 +70,12 @@ if st.button("Process & Consolidate"):
             )
         
         st.success("Consolidation Complete!")
+        
+        # Explanation Button for AS 21 Guidance
+        if st.button("Explanation"):
+            explanation_query = "What are the key steps for consolidating financial statements according to AS 21?"
+            explanation_response = consult_openai(explanation_query)
+            st.subheader("AS 21 Consolidation Steps")
+            st.write(explanation_response)
     else:
         st.warning("Please upload at least one file.")
