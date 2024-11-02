@@ -28,11 +28,6 @@ consolidation_complete = False
 # Process and consolidate the data upon button click
 if st.button("Process & Consolidate") or consolidation_complete:
     if uploaded_files:
-        # Step 1: Consult OpenAI for initial AS 21 guidance on consolidation steps
-        st.subheader("AS 21 Initial Consolidation Steps")
-        initial_guidance = consult_openai("What are the initial consolidation steps to follow according to AS 21?")
-        st.write(initial_guidance)
-        
         # Initialize the workbook for the consolidated data
         consolidated_wb = Workbook()
         consolidated_ws = consolidated_wb.active
@@ -56,10 +51,6 @@ if st.button("Process & Consolidate") or consolidation_complete:
             for sheet_name in xls.sheet_names:
                 sheet_data = xls.parse(sheet_name)
                 add_sheet_to_summary(sheet_data, file_name, sheet_name)
-                
-                # Consult OpenAI for sheet-specific guidance
-                sheet_guidance = consult_openai(f"What AS 21 rules should I consider for consolidating the '{sheet_name}' sheet in '{file_name}'?")
-                st.write(f"Guidance for {file_name} - {sheet_name}: {sheet_guidance}")
 
         # Write consolidated data to the workbook
         header = ["File", "Sheet"] + [f"Column {i}" for i in range(1, len(summary_data[0]) - 1)]
@@ -81,10 +72,29 @@ if st.button("Process & Consolidate") or consolidation_complete:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         
-        # Set consolidation flag to True after processing is complete
-        consolidation_complete = True
         st.success("Consolidation Complete!")
         
+        # Set consolidation flag to True after processing is complete
+        consolidation_complete = True
+        
+        # If the file is downloaded, show AS 21 guidance and recommendations
+        if download:
+            # Display AS 21 initial consolidation steps
+            st.subheader("AS 21 Initial Consolidation Steps")
+            initial_guidance = consult_openai("What are the initial consolidation steps to follow according to AS 21?")
+            st.write(initial_guidance)
+            
+            # Display sheet-specific guidance
+            for uploaded_file in uploaded_files:
+                file_name = uploaded_file.name
+                xls = pd.ExcelFile(uploaded_file)
+                
+                # Process each sheet in the file
+                for sheet_name in xls.sheet_names:
+                    # Consult OpenAI for sheet-specific guidance
+                    sheet_guidance = consult_openai(f"What AS 21 rules should I consider for consolidating the '{sheet_name}' sheet in '{file_name}'?")
+                    st.write(f"Guidance for {file_name} - {sheet_name}: {sheet_guidance}")
+    
     else:
         st.warning("Please upload at least one file.")
 
