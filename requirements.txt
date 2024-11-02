@@ -7,3 +7,5 @@ beautifulsoup4
 python-docx
 chromadb==0.3.22
 PyPDF2
+scikit-learn
+requests
