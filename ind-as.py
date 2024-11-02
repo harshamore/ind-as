@@ -49,30 +49,56 @@ class GuideAgent(Agent):
             text += page.extract_text()
         return text
 
+    def split_text_into_chunks(self, text, max_tokens=3000):
+        words = text.split()
+        chunks = []
+        current_chunk = []
+        current_length = 0
+
+        for word in words:
+            current_length += len(word) + 1  # Adding 1 for the space
+            current_chunk.append(word)
+            if current_length >= max_tokens:
+                chunks.append(" ".join(current_chunk))
+                current_chunk = []
+                current_length = 0
+
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
+        
+        return chunks
+
     def process_ind_as_110_document(self):
         url = "https://resource.cdn.icai.org/53621asb43065.pdf"
         self.fetch_document(url)
         document_text = self.extract_text_from_pdf("/tmp/ind_as_110.pdf")
 
-        # Summarize document into steps using OpenAI with chat model
-        prompt = (
-            "Extract and summarize the key steps for preparing consolidated financial statements as per Ind AS 110 "
-            "from the following text:\n\n" + document_text
-        )
-        
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=500
+        # Split document text into manageable chunks
+        chunks = self.split_text_into_chunks(document_text, max_tokens=3000)
+
+        steps = []
+        for chunk in chunks:
+            prompt = (
+                "Extract and summarize the key steps for preparing consolidated financial statements as per Ind AS 110 "
+                "from the following text:\n\n" + chunk
             )
-            return response.choices[0].message["content"].strip().splitlines()
-        except openai.error.InvalidRequestError as e:
-            st.error(f"Invalid request error: {e}")
-            return ["Error processing document. Please check your OpenAI API configuration."]
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
-            return ["Error processing document. Please try again later."]
+            
+            try:
+                response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=500
+                )
+                steps_chunk = response.choices[0].message["content"].strip().splitlines()
+                steps.extend(steps_chunk)
+            except openai.error.InvalidRequestError as e:
+                st.error(f"Invalid request error: {e}")
+                return ["Error processing document. Please check your OpenAI API configuration."]
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+                return ["Error processing document. Please try again later."]
+
+        return steps
 
     def get_steps(self):
         return self.steps
