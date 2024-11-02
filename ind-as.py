@@ -22,9 +22,6 @@ def consult_openai(query):
     )
     return response.choices[0].message["content"].strip()
 
-# Initialize a variable to track whether consolidation is complete
-consolidation_complete = False
-
 # Process and consolidate the data upon button click
 if st.button("Process & Consolidate"):
     if uploaded_files:
@@ -51,7 +48,7 @@ if st.button("Process & Consolidate"):
             for sheet_name in xls.sheet_names:
                 sheet_data = xls.parse(sheet_name)
                 add_sheet_to_summary(sheet_data, file_name, sheet_name)
-        
+
         # Write consolidated data to the workbook
         header = ["File", "Sheet"] + [f"Column {i}" for i in range(1, len(summary_data[0]) - 1)]
         consolidated_ws.append(header)
@@ -74,16 +71,10 @@ if st.button("Process & Consolidate"):
         
         st.success("Consolidation Complete!")
         
-        # Set flag to indicate that consolidation is complete
-        consolidation_complete = True
+        # Step 1: Consult OpenAI for initial AS 21 guidance on consolidation steps
+        st.subheader("AS 21 Initial Consolidation Steps")
+        initial_guidance = consult_openai("What are the initial consolidation steps to follow according to AS 21?")
+        st.write(initial_guidance)
+        
     else:
         st.warning("Please upload at least one file.")
-
-# Explanation Button for AS 21 Guidance (enabled after consolidation)
-if consolidation_complete:
-    if st.button("Explanation"):
-        explanation_query = "What are the key steps for consolidating financial statements according to AS 21?"
-        explanation_response = consult_openai(explanation_query)
-        
-        st.subheader("AS 21 Consolidation Steps")
-        st.write(explanation_response)
