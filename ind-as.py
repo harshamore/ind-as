@@ -48,7 +48,7 @@ class GuideAgent(Agent):
             "from the following text:\n\n" + document_text
         )
         response = openai.Completion.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             prompt=prompt,
             max_tokens=500
         )
@@ -90,7 +90,7 @@ class DataEntryAgent(Agent):
     def get_required_items_from_gpt4(self, standard):
         prompt = f"Analyze the latest {standard} standard and list all required items and their structure for financial statements."
         response = openai.Completion.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             prompt=prompt,
             max_tokens=150
         )
@@ -103,7 +103,7 @@ class DataEntryAgent(Agent):
     def get_handling_guidance_from_gpt4(self, missing_entries, standard):
         prompt = f"Based on {standard}, how should we proceed if the following items are missing in financial statements: {', '.join(missing_entries)}?"
         response = openai.Completion.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             prompt=prompt,
             max_tokens=150
         )
