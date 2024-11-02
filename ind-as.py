@@ -6,6 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 from PyPDF2 import PdfReader
 import os
+from pydantic import PrivateAttr
 
 # Set OpenAI API key from Streamlit secrets
 openai.api_key = st.secrets["OPENAI_API_KEY"]
@@ -21,9 +22,11 @@ uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_
 
 # Define GuideAgent to process Ind AS 110 document and create a list of steps
 class GuideAgent(Agent):
+    _steps: list = PrivateAttr()
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.steps = self.load_or_process_steps()
+        self._steps = self.load_or_process_steps()
 
     def load_or_process_steps(self):
         # Check if steps are cached
@@ -101,7 +104,7 @@ class GuideAgent(Agent):
         return steps
 
     def get_steps(self):
-        return self.steps
+        return self._steps
 
 # Initialize the GuideAgent to create instructions based on Ind AS 110
 guide_agent = GuideAgent(name="Guide", role="Guide Specialist", goal="Provide steps for Ind AS 110", backstory="Expert in understanding Ind AS 110.")
@@ -169,9 +172,6 @@ def process_files(files):
         if data:
             data_entries.update(data)
     
-    # Continue with other agents following GuideAgent's steps...
-    # (Implementation for ReconciliationAgent, ComplianceAgent, ConsolidationAgent, consulting GuideAgent as needed)
-
     return data_entries  # Assuming final data
 
 # Process button for actual data processing
