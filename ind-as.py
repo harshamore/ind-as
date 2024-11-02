@@ -1,201 +1,110 @@
 import streamlit as st
 import pandas as pd
-import openai
-from crewai import Crew, Agent
-import requests
-from bs4 import BeautifulSoup
 from PyPDF2 import PdfReader
+from sklearn.feature_extraction.text import TfidfVectorizer
+import requests
 import os
-from pydantic import PrivateAttr
+import pickle
 
-# Set OpenAI API key from Streamlit secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Define path for AS 21 document and embeddings
+as21_pdf_url = "https://resource.cdn.icai.org/69249asb55316-as21.pdf"
+embedding_path = "/tmp/as21_embeddings.pkl"
 
-# Streamlit app title
-st.title("Intelligent Ind AS Financial Consolidation Tool with Guide Agent")
+# Define vectorizer for RAG approach
+vectorizer = TfidfVectorizer()
 
-# Dropdown for standard selection
-selected_standard = st.selectbox("Select Accounting Standard", ["Ind AS 110", "Ind AS 21"])
+# Step 1: AS21 Compliance Agent
+class AS21ComplianceAgent:
+    def __init__(self):
+        self.embeddings = self.load_or_create_embeddings()
+
+    def fetch_and_process_pdf(self, url):
+        response = requests.get(url)
+        with open("/tmp/as21.pdf", "wb") as f:
+            f.write(response.content)
+
+        reader = PdfReader("/tmp/as21.pdf")
+        document_text = ""
+        for page in reader.pages:
+            document_text += page.extract_text()
+        return document_text
+
+    def chunk_text(self, text, chunk_size=300):
+        words = text.split()
+        return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
+
+    def create_embeddings(self):
+        document_text = self.fetch_and_process_pdf(as21_pdf_url)
+        chunks = self.chunk_text(document_text)
+        embeddings = vectorizer.fit_transform(chunks)
+        with open(embedding_path, "wb") as f:
+            pickle.dump((chunks, embeddings), f)
+        return chunks, embeddings
+
+    def load_or_create_embeddings(self):
+        if os.path.exists(embedding_path):
+            with open(embedding_path, "rb") as f:
+                return pickle.load(f)
+        else:
+            return self.create_embeddings()
+
+    def retrieve_relevant_info(self, query):
+        query_embedding = vectorizer.transform([query])
+        scores = query_embedding * self.embeddings.T
+        best_chunk_idx = scores.toarray().argmax()
+        return self.embeddings[0][best_chunk_idx]
+
+# Step 2: Data Entry Agent
+class DataEntryAgent:
+    def __init__(self, compliance_agent):
+        self.compliance_agent = compliance_agent
+
+    def process_excel_files(self, files):
+        compliance_query = "What information needs to be checked for compliance with AS 21?"
+        required_info = self.compliance_agent.retrieve_relevant_info(compliance_query)
+
+        results = {}
+        for file in files:
+            df = pd.read_excel(file)
+            missing_info = []
+            for info in required_info:
+                if not df.apply(lambda row: row.astype(str).str.contains(info).any(), axis=1).any():
+                    missing_info.append(info)
+
+            results[file.name] = missing_info
+        return results
+
+# Step 3: Consolidation Agent
+class ConsolidationAgent:
+    def __init__(self, compliance_agent, data_entry_agent):
+        self.compliance_agent = compliance_agent
+        self.data_entry_agent = data_entry_agent
+
+    def consolidate(self, files):
+        results = self.data_entry_agent.process_excel_files(files)
+        consolidated_output = {
+            "Compliance Check": results,
+            "Summary": "Consolidated statement based on AS 21 compliance checks and data entries."
+        }
+        return consolidated_output
+
+# Instantiate agents
+as21_compliance_agent = AS21ComplianceAgent()
+data_entry_agent = DataEntryAgent(as21_compliance_agent)
+consolidation_agent = ConsolidationAgent(as21_compliance_agent, data_entry_agent)
+
+# Streamlit UI
+st.title("AS 21 Compliance & Consolidation Tool")
 
 # Upload multiple Excel files
 uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_multiple_files=True, type="xlsx")
 
-# Define GuideAgent to process Ind AS 110 document and create a list of steps
-class GuideAgent(Agent):
-    _steps: list = PrivateAttr()
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._steps = self.load_or_process_steps()
-
-    def load_or_process_steps(self):
-        # Check if steps are cached
-        if os.path.exists("/tmp/ind_as_110_steps.txt"):
-            with open("/tmp/ind_as_110_steps.txt", "r") as file:
-                steps = file.readlines()
-            return [step.strip() for step in steps]
-        else:
-            steps = self.process_ind_as_110_document()
-            with open("/tmp/ind_as_110_steps.txt", "w") as file:
-                file.write("\n".join(steps))
-            return steps
-
-    def fetch_document(self, url):
-        response = requests.get(url)
-        with open("/tmp/ind_as_110.pdf", "wb") as f:
-            f.write(response.content)
-
-    def extract_text_from_pdf(self, filepath):
-        reader = PdfReader(filepath)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text()
-        return text
-
-    def split_text_into_chunks(self, text, max_tokens=3000):
-        words = text.split()
-        chunks = []
-        current_chunk = []
-        current_length = 0
-
-        for word in words:
-            current_length += len(word) + 1  # Adding 1 for the space
-            current_chunk.append(word)
-            if current_length >= max_tokens:
-                chunks.append(" ".join(current_chunk))
-                current_chunk = []
-                current_length = 0
-
-        if current_chunk:
-            chunks.append(" ".join(current_chunk))
-        
-        return chunks
-
-    def process_ind_as_110_document(self):
-        url = "https://resource.cdn.icai.org/53621asb43065.pdf"
-        self.fetch_document(url)
-        document_text = self.extract_text_from_pdf("/tmp/ind_as_110.pdf")
-
-        # Split document text into manageable chunks
-        chunks = self.split_text_into_chunks(document_text, max_tokens=3000)
-
-        steps = []
-        for chunk in chunks:
-            prompt = (
-                "Extract and summarize the key steps for preparing consolidated financial statements as per Ind AS 110 "
-                "from the following text:\n\n" + chunk
-            )
-            
-            try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=500
-                )
-                steps_chunk = response.choices[0].message["content"].strip().splitlines()
-                steps.extend(steps_chunk)
-            except openai.error.InvalidRequestError as e:
-                st.error(f"Invalid request error: {e}")
-                return ["Error processing document. Please check your OpenAI API configuration."]
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
-                return ["Error processing document. Please try again later."]
-
-        return steps
-
-    def get_steps(self):
-        return self._steps
-
-# Initialize the GuideAgent to create instructions based on Ind AS 110
-guide_agent = GuideAgent(name="Guide", role="Guide Specialist", goal="Provide steps for Ind AS 110", backstory="Expert in understanding Ind AS 110.")
-
-# Define other agents with enhanced functionalities, consulting GuideAgent steps as needed
-class DataEntryAgent(Agent):
-    def perform(self, data, guide_agent):
-        steps = guide_agent.get_steps()  # Consult GuideAgent for instructions
-        st.write("Steps from GuideAgent for Data Entry:")
-        st.write(steps)
-
-        # GPT-4 to interpret selected Ind AS structure and required items
-        required_items = self.get_required_items_from_gpt4(selected_standard)
-        try:
-            extracted_data = pd.read_excel(data, sheet_name=None)
-            extracted_trial_balances = {sheet: df for sheet, df in extracted_data.items() if 'Trial Balance' in sheet}
-
-            for sheet, df in extracted_trial_balances.items():
-                missing_entries = self.check_missing_entries(df, required_items)
-                if missing_entries:
-                    handling_guidance = self.get_handling_guidance_from_gpt4(missing_entries, selected_standard)
-                    df['Missing Entries'] = ', '.join(missing_entries)
-                    df['Handling Guidance'] = handling_guidance
-                extracted_trial_balances[sheet] = df
-
-            return extracted_trial_balances
-        except Exception as e:
-            st.error(f"Data extraction failed: {e}")
-            return None
-
-    def get_required_items_from_gpt4(self, standard):
-        prompt = f"Analyze the latest {standard} standard and list all required items and their structure for financial statements."
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=150
-        )
-        return response.choices[0].message["content"].strip().split(',')
-
-    def check_missing_entries(self, data, required_items):
-        missing_entries = [item for item in required_items if not data['Account'].str.contains(item).any()]
-        return missing_entries
-
-    def get_handling_guidance_from_gpt4(self, missing_entries, standard):
-        prompt = f"Based on {standard}, how should we proceed if the following items are missing in financial statements: {', '.join(missing_entries)}?"
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=150
-        )
-        return response.choices[0].message["content"].strip()
-
-# Initialize Crew with the defined agents, including GuideAgent
-crew = Crew(agents=[
-    guide_agent,
-    DataEntryAgent(name="Data Entry", role="Data Entry Specialist", goal="Ensure data completeness based on Ind AS standards", backstory="Expert in data validation for financial records."),
-])
-
-# Define the process function
-def process_files(files):
-    data_entries = {}
-    for file in files:
-        data_entry_agent = crew.get_agent("Data Entry")
-        data = data_entry_agent.perform(file, guide_agent)  # Pass GuideAgent to consult instructions
-        if data:
-            data_entries.update(data)
-    
-    return data_entries  # Assuming final data
-
-# Process button for actual data processing
-if st.button("Process"):
+# Process files and consolidate data
+if st.button("Process & Consolidate"):
     if uploaded_files:
-        with st.spinner("Processing..."):
-            final_consolidated_statement = process_files(uploaded_files)
-            st.success("Consolidation Complete!")
-            st.write("Final Consolidated Statement:")
-            st.dataframe(final_consolidated_statement)
-            csv = final_consolidated_statement.to_csv(index=False)
-            st.download_button("Download Consolidated Statement as CSV", data=csv, file_name="consolidated_statement.csv")
+        with st.spinner("Processing and consolidating..."):
+            output = consolidation_agent.consolidate(uploaded_files)
+            st.write("Consolidation Result:")
+            st.json(output)
     else:
         st.warning("Please upload at least one file.")
-
-# Test OpenAI Connection button
-if st.button("Test OpenAI Connection"):
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": "Hello, OpenAI!"}],
-            max_tokens=10
-        )
-        st.write("Response from OpenAI API:")
-        st.write(response.choices[0].message["content"].strip())
-    except Exception as e:
-        st.error(f"Error: {e}")
