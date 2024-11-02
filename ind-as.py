@@ -13,9 +13,11 @@ embedding_path = "/tmp/as21_embeddings.pkl"
 # Step 1: AS21 Compliance Agent
 class AS21ComplianceAgent:
     def __init__(self):
-        self.embeddings, self.vectorizer = self.load_or_create_embeddings()
+        # Initialize the embeddings and vectorizer by loading or creating them
+        self.chunks, self.embeddings, self.vectorizer = self.load_or_create_embeddings()
 
     def fetch_and_process_pdf(self, url):
+        # Fetch and read the PDF document
         response = requests.get(url)
         with open("/tmp/as21.pdf", "wb") as f:
             f.write(response.content)
@@ -27,33 +29,41 @@ class AS21ComplianceAgent:
         return document_text
 
     def chunk_text(self, text, chunk_size=300):
+        # Split text into chunks of specified token size
         words = text.split()
         return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
 
     def create_embeddings(self):
+        # Create chunks and embeddings from the AS 21 document
         document_text = self.fetch_and_process_pdf(as21_pdf_url)
         chunks = self.chunk_text(document_text)
         vectorizer = TfidfVectorizer()
         embeddings = vectorizer.fit_transform(chunks)
         
+        # Save chunks, embeddings, and vectorizer to a file
         with open(embedding_path, "wb") as f:
-            pickle.dump((chunks, embeddings, vectorizer), f)  # Save the vectorizer with embeddings
+            pickle.dump((chunks, embeddings, vectorizer), f)
         return chunks, embeddings, vectorizer
 
     def load_or_create_embeddings(self):
+        # Load existing embeddings or create new ones if file is missing or corrupted
         if os.path.exists(embedding_path):
-            with open(embedding_path, "rb") as f:
-                chunks, embeddings, vectorizer = pickle.load(f)
-            return chunks, embeddings, vectorizer
+            try:
+                with open(embedding_path, "rb") as f:
+                    chunks, embeddings, vectorizer = pickle.load(f)
+                return chunks, embeddings, vectorizer
+            except (EOFError, ValueError, pickle.UnpicklingError) as e:
+                st.error(f"Failed to load embeddings, recreating: {e}")
+                return self.create_embeddings()
         else:
             return self.create_embeddings()
 
     def retrieve_relevant_info(self, query):
-        # Ensure that the vectorizer is already fitted before calling transform()
+        # Transform query and retrieve the best-matching chunk
         query_embedding = self.vectorizer.transform([query])
         scores = query_embedding * self.embeddings.T
         best_chunk_idx = scores.toarray().argmax()
-        return self.embeddings[0][best_chunk_idx]
+        return self.chunks[best_chunk_idx]
 
 # Step 2: Data Entry Agent
 class DataEntryAgent:
@@ -61,9 +71,11 @@ class DataEntryAgent:
         self.compliance_agent = compliance_agent
 
     def process_excel_files(self, files):
+        # Query AS 21 Compliance Agent for required information
         compliance_query = "What information needs to be checked for compliance with AS 21?"
         required_info = self.compliance_agent.retrieve_relevant_info(compliance_query)
 
+        # Process each uploaded Excel file to check for missing information
         results = {}
         for file in files:
             df = pd.read_excel(file)
@@ -71,7 +83,6 @@ class DataEntryAgent:
             for info in required_info:
                 if not df.apply(lambda row: row.astype(str).str.contains(info).any(), axis=1).any():
                     missing_info.append(info)
-
             results[file.name] = missing_info
         return results
 
@@ -82,6 +93,7 @@ class ConsolidationAgent:
         self.data_entry_agent = data_entry_agent
 
     def consolidate(self, files):
+        # Use Data Entry Agent to process files and gather results
         results = self.data_entry_agent.process_excel_files(files)
         consolidated_output = {
             "Compliance Check": results,
