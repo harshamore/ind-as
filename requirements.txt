@@ -1,0 +1,7 @@
+streamlit
+pandas
+openai
+crewAI  # assuming a hypothetical package for crewai functionality
+requests
+beautifulsoup4
+python-docx
