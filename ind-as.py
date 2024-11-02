@@ -8,7 +8,7 @@ import os
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # Streamlit app title
-st.title("AS 21 Compliance & Consolidation Tool with OpenAI Consultation")
+st.title("Udal Pavvya accountant-")
 
 # Upload multiple Excel files
 uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_multiple_files=True, type="xlsx")
