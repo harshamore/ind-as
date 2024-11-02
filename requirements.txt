@@ -1,8 +1,8 @@
 streamlit
 pandas
 openai
-crewai
+crewai==0.1.1
 requests
 beautifulsoup4
 python-docx
-chromadb
+chromadb==0.3.22
