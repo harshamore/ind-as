@@ -200,12 +200,12 @@ class ConsolidationAgent(Agent):
         )
         return response.choices[0].text.strip()
 
-# Initialize Crew with the defined agents
+# Initialize Crew with the defined agents and required fields
 crew = Crew(agents=[
-    DataEntryAgent(name="Data Entry"),
-    ReconciliationAgent(name="Reconciliation"),
-    ComplianceAgent(name="Compliance"),
-    ConsolidationAgent(name="Consolidation")
+    DataEntryAgent(name="Data Entry", role="Data Entry Specialist", goal="Ensure data completeness based on Ind AS standards", backstory="Expert in data validation for financial records."),
+    ReconciliationAgent(name="Reconciliation", role="Reconciliation Specialist", goal="Resolve intercompany discrepancies based on Ind AS standards", backstory="Skilled in handling intercompany transactions."),
+    ComplianceAgent(name="Compliance", role="Compliance Officer", goal="Ensure compliance with Ind AS 110 and Ind AS 21 standards", backstory="Experienced in financial compliance."),
+    ConsolidationAgent(name="Consolidation", role="Consolidation Specialist", goal="Consolidate subsidiary data as per Ind AS standards", backstory="Expert in consolidating financial statements.")
 ])
 
 # Define the process function
