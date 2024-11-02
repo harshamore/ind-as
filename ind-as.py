@@ -10,13 +10,10 @@ import pickle
 as21_pdf_url = "https://resource.cdn.icai.org/69249asb55316-as21.pdf"
 embedding_path = "/tmp/as21_embeddings.pkl"
 
-# Define vectorizer for RAG approach
-vectorizer = TfidfVectorizer()
-
 # Step 1: AS21 Compliance Agent
 class AS21ComplianceAgent:
     def __init__(self):
-        self.embeddings = self.load_or_create_embeddings()
+        self.embeddings, self.vectorizer = self.load_or_create_embeddings()
 
     def fetch_and_process_pdf(self, url):
         response = requests.get(url)
@@ -36,20 +33,24 @@ class AS21ComplianceAgent:
     def create_embeddings(self):
         document_text = self.fetch_and_process_pdf(as21_pdf_url)
         chunks = self.chunk_text(document_text)
+        vectorizer = TfidfVectorizer()
         embeddings = vectorizer.fit_transform(chunks)
+        
         with open(embedding_path, "wb") as f:
-            pickle.dump((chunks, embeddings), f)
-        return chunks, embeddings
+            pickle.dump((chunks, embeddings, vectorizer), f)  # Save the vectorizer with embeddings
+        return chunks, embeddings, vectorizer
 
     def load_or_create_embeddings(self):
         if os.path.exists(embedding_path):
             with open(embedding_path, "rb") as f:
-                return pickle.load(f)
+                chunks, embeddings, vectorizer = pickle.load(f)
+            return chunks, embeddings, vectorizer
         else:
             return self.create_embeddings()
 
     def retrieve_relevant_info(self, query):
-        query_embedding = vectorizer.transform([query])
+        # Ensure that the vectorizer is already fitted before calling transform()
+        query_embedding = self.vectorizer.transform([query])
         scores = query_embedding * self.embeddings.T
         best_chunk_idx = scores.toarray().argmax()
         return self.embeddings[0][best_chunk_idx]
