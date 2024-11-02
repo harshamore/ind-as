@@ -15,9 +15,8 @@ selected_standard = st.selectbox("Select Accounting Standard", ["Ind AS 110", "I
 # Upload multiple Excel files
 uploaded_files = st.file_uploader("Upload Financial Statements (Excel)", accept_multiple_files=True, type="xlsx")
 
-# Initialize OpenAI API
-openai.api_key = st.secrets["OPENAI_API_KEY"]  # Set your OpenAI API key
-crew = Crew()  # Initialize a Crew instance
+# Use OpenAI API key from Streamlit secrets
+openai.api_key = st.secrets["OPENAI_API_KEY"]  # Access the API key securely
 
 # Function to fetch the latest Ind AS document based on selection
 def fetch_latest_ind_as_document(standard):
@@ -201,11 +200,13 @@ class ConsolidationAgent(Agent):
         )
         return response.choices[0].text.strip()
 
-# Add agents to the crew
-crew.add_agent(DataEntryAgent(name="Data Entry"))
-crew.add_agent(ReconciliationAgent(name="Reconciliation"))
-crew.add_agent(ComplianceAgent(name="Compliance"))
-crew.add_agent(ConsolidationAgent(name="Consolidation"))
+# Initialize Crew with the defined agents
+crew = Crew(agents=[
+    DataEntryAgent(name="Data Entry"),
+    ReconciliationAgent(name="Reconciliation"),
+    ComplianceAgent(name="Compliance"),
+    ConsolidationAgent(name="Consolidation")
+])
 
 # Define the process function
 def process_files(files):
